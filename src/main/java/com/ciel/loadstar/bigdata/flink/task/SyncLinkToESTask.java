@@ -1,21 +1,18 @@
 package com.ciel.loadstar.bigdata.flink.task;
 
 import com.alibaba.fastjson.JSONObject;
-import com.ciel.loadstar.bigdata.flink.config.ElkConfig;
-import com.ciel.loadstar.bigdata.flink.config.ElkHost;
-import com.ciel.loadstar.bigdata.flink.config.KafkaUtil;
+import com.ciel.loadstar.bigdata.flink.config.*;
 import com.ciel.loadstar.bigdata.flink.domain.ESLink;
 import com.ciel.loadstar.bigdata.flink.domain.Link;
-import com.ciel.loadstar.bigdata.flink.domain.LinkEvent;
 import com.ciel.loadstar.bigdata.flink.map.LinkEventMapFunction;
 import com.ciel.loadstar.bigdata.flink.util.ESRestClient;
+import com.ciel.loadstar.infrastructure.events.link.LinkEvent;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
 import org.apache.flink.streaming.connectors.elasticsearch.ElasticsearchSinkFunction;
 import org.apache.flink.streaming.connectors.elasticsearch.RequestIndexer;
 import org.apache.flink.streaming.connectors.elasticsearch6.ElasticsearchSink;
@@ -47,42 +44,22 @@ import java.util.List;
 import java.util.Properties;
 
 public class SyncLinkToESTask {
-    static String kafkaTopic = "LinkEvent_Dev";
-    static String esHost = "loadstar-8738674613.ap-southeast-2.bonsaisearch.net";
-    static Integer esPort = 443;
-    static String esSchema = "https";
-    static String esUsername = "bfsr68vnuo";
-    static String esPassword = "d3k85wu86d";
-
     public static void main(String[] args) throws Exception {
+        String linkEventTopic = NacosUtil.getProperty(ConfigConstant.NACOS_TOPIC_LINK_EVENT);
+
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         env.setStreamTimeCharacteristic(TimeCharacteristic.ProcessingTime);
 
         Properties kafkaProperties = KafkaUtil.getProperties();
-        FlinkKafkaConsumer consumer = new FlinkKafkaConsumer<String>(kafkaTopic, new SimpleStringSchema(), kafkaProperties);
-        consumer.setStartFromLatest();
+        FlinkKafkaConsumer consumer = new FlinkKafkaConsumer<String>(linkEventTopic, new SimpleStringSchema(), kafkaProperties);
+        consumer.setStartFromGroupOffsets();
 
         DataStreamSource<String> dataStreamSource = env.addSource(consumer);
         DataStream dataStream = dataStreamSource.map(new LinkEventMapFunction());
 
-        ArrayList<HttpHost> httpHosts = new ArrayList<HttpHost>();
-        httpHosts.add(new HttpHost(esHost, esPort, esSchema));
-
-        ElkHost elkHost = new ElkHost();
-        elkHost.setIp(esHost);
-        elkHost.setSchema(esSchema);
-        elkHost.setPort(esPort.toString());
-        elkHost.setUsername(esUsername);
-        elkHost.setPassword(esPassword);
-
-        List<ElkHost> elkHosts = new ArrayList<>();
-        elkHosts.add(elkHost);
-
-        ElkConfig elkConfig = new ElkConfig();
-        elkConfig.setHosts(elkHosts);
-        elkConfig.setClustername("loadstar");
-
+        ElkConfig elkConfig = EsConfigUtil.getConfig();
+        ArrayList<HttpHost> httpHosts = EsConfigUtil.getHttpHosts();
         ESRestClient.elkConfig = elkConfig;
 
         ElasticsearchSink.Builder<LinkEvent> elasticsearchSinkBuilder = new ElasticsearchSink.Builder<LinkEvent>(
@@ -93,6 +70,7 @@ public class SyncLinkToESTask {
                         Link link = ((JSONObject)element.getObj()).toJavaObject(Link.class);
 
                         ESLink esLink = new ESLink();
+                        esLink.setProfile(element.getProfile());
                         esLink.setName(link.getName());
                         esLink.setTitle(link.getTitle());
                         esLink.setTableId(link.getId().toString());
@@ -143,27 +121,28 @@ public class SyncLinkToESTask {
 
                     @Override
                     public void process(LinkEvent linkEvent, RuntimeContext runtimeContext, RequestIndexer requestIndexer) {
-                        switch (linkEvent.getEventType()){
-                            case "NEW":
-                                requestIndexer.add(createIndexRequest(linkEvent));
-                                break;
-                            case "DELETE":
-                                createDeleteRequest(linkEvent).forEach(req -> requestIndexer.add(req));
-                                break;
+                        if (linkEvent != null){
+                            switch (linkEvent.getEventType()){
+                                case "NEW":
+                                    requestIndexer.add(createIndexRequest(linkEvent));
+                                    break;
+                                case "DELETE":
+                                    createDeleteRequest(linkEvent).forEach(req -> requestIndexer.add(req));
+                                    break;
+                            }
                         }
-
                     }
                 }
         );
 
         HttpHost[] array =new HttpHost[1];
-        RestClientFactoryImpl restClientFactory = new RestClientFactoryImpl("bfsr68vnuo", "d3k85wu86d");
+        RestClientFactoryImpl restClientFactory = new RestClientFactoryImpl(NacosUtil.getProperty(ConfigConstant.NACOS_ES_USERNAME), NacosUtil.getProperty(ConfigConstant.NACOS_ES_PASSWORD));
         restClientFactory.configureRestClientBuilder(RestClient.builder(httpHosts.toArray(array)));
         elasticsearchSinkBuilder.setRestClientFactory(restClientFactory);
         elasticsearchSinkBuilder.setBulkFlushMaxActions(1);
 
         dataStream.addSink(elasticsearchSinkBuilder.build());
-        dataStream.addSink(new PrintSinkFunction());
+//        dataStream.addSink(new PrintSinkFunction());
 
         env.execute("SyncLinkToESTask");
     }

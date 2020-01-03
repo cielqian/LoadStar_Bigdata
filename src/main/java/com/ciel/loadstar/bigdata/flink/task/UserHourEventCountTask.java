@@ -1,7 +1,9 @@
 package com.ciel.loadstar.bigdata.flink.task;
 
 import com.ciel.loadstar.bigdata.flink.agg.CountAgg;
+import com.ciel.loadstar.bigdata.flink.config.ConfigConstant;
 import com.ciel.loadstar.bigdata.flink.config.KafkaUtil;
+import com.ciel.loadstar.bigdata.flink.config.NacosUtil;
 import com.ciel.loadstar.bigdata.flink.domain.EventTrack;
 import com.ciel.loadstar.bigdata.flink.map.EventTrackMapFunction;
 import com.ciel.loadstar.bigdata.flink.sink.UserHourEventCountSink;
@@ -13,7 +15,6 @@ import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
 import org.apache.flink.streaming.api.functions.timestamps.AscendingTimestampExtractor;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
 
@@ -24,17 +25,21 @@ import java.util.Properties;
  */
 public class UserHourEventCountTask {
     public static void main(String[] args) throws Exception {
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(1);
-
-        env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+        String eventTrackTopic = NacosUtil.getProperty(ConfigConstant.NACOS_TOPIC_EVENT_TRACK);
 
         Properties kafkaProperties = KafkaUtil.getProperties();
-        FlinkKafkaConsumer consumer = new FlinkKafkaConsumer<String>("EventTrack", new SimpleStringSchema(), kafkaProperties);
-        consumer.setStartFromLatest();
+
+        FlinkKafkaConsumer consumer = new FlinkKafkaConsumer<String>(eventTrackTopic, new SimpleStringSchema(), kafkaProperties);
+        consumer.setStartFromGroupOffsets();
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+
         DataStreamSource<String> dataStreamSource = env.addSource(consumer);
 
-        SingleOutputStreamOperator ws = dataStreamSource.map(new EventTrackMapFunction())
+        SingleOutputStreamOperator ws =
+                dataStreamSource.map(new EventTrackMapFunction())
                 .filter(x -> !"".equals(x.getTag()) && x.getTag() != null)
                 .assignTimestampsAndWatermarks(new AscendingTimestampExtractor<EventTrack>() {
                     @Override
@@ -43,7 +48,7 @@ public class UserHourEventCountTask {
                     }
                 })
                 .keyBy(x -> x.getUserId())
-                .timeWindow(Time.minutes(30))
+                .timeWindow(Time.minutes(5))
                 .aggregate(new CountAgg(), new WindowHourEventCountFunction());
         ws.addSink(new UserHourEventCountSink());
         ws.addSink(new PrintSinkFunction());

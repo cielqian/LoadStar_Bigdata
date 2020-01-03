@@ -3,7 +3,7 @@ package com.ciel.loadstar.bigdata.flink.sink;
 import com.alibaba.fastjson.JSONObject;
 import com.ciel.loadstar.bigdata.flink.domain.ESLink;
 import com.ciel.loadstar.bigdata.flink.domain.Link;
-import com.ciel.loadstar.bigdata.flink.domain.LinkEvent;
+import com.ciel.loadstar.infrastructure.events.link.LinkEvent;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.streaming.connectors.elasticsearch.ElasticsearchSinkFunction;
 import org.apache.flink.streaming.connectors.elasticsearch.RequestIndexer;
