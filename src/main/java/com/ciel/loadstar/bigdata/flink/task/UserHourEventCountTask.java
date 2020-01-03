@@ -48,7 +48,7 @@ public class UserHourEventCountTask {
                     }
                 })
                 .keyBy(x -> x.getUserId())
-                .timeWindow(Time.minutes(5))
+                .timeWindow(Time.minutes(10))
                 .aggregate(new CountAgg(), new WindowHourEventCountFunction());
         ws.addSink(new UserHourEventCountSink());
         ws.addSink(new PrintSinkFunction());
