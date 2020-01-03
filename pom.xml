@@ -48,8 +48,12 @@ under the License.
 				<enabled>true</enabled>
 			</snapshots>
 		</repository>
+		<repository>
+			<id>rdc-releases</id>
+			<url>https://repo.rdc.aliyun.com/repository/112675-release-IVbRle/</url>
+		</repository>
 	</repositories>
-	
+
 	<!-- 
 		
 		Execute "mvn clean package -Pbuild-jar"
