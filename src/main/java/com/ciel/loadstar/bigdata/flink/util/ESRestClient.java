@@ -2,6 +2,7 @@ package com.ciel.loadstar.bigdata.flink.util;
 
 import com.ciel.loadstar.bigdata.flink.config.ElkConfig;
 import com.ciel.loadstar.bigdata.flink.config.ElkHost;
+import com.ciel.loadstar.bigdata.flink.config.EsConfigUtil;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
@@ -12,6 +13,8 @@ import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
 import org.elasticsearch.client.RestHighLevelClient;
+
+import java.util.ArrayList;
 
 /**
  * @author cielqian
@@ -28,6 +31,10 @@ public class ESRestClient {
             return client;
         }else {
             synchronized(ESRestClient.class) {
+                if (elkConfig == null){
+                    ElkConfig newElkConfig = EsConfigUtil.getConfig();
+                    elkConfig = newElkConfig;
+                }
                 HttpHost[] httpHosts = new HttpHost[elkConfig.getHosts().size()];
                 String username = "", password = "";
                 for (int i = 0; i<httpHosts.length;i++){
