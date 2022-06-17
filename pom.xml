@@ -30,7 +30,7 @@ under the License.
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<flink.version>1.9.1</flink.version>
-		<fastjson.version>1.2.51</fastjson.version>
+		<fastjson.version>1.2.83</fastjson.version>
 		<mysql.version>8.0.18</mysql.version>
         <dbcp.version>2.1.1</dbcp.version>
 		<nacos.version>1.1.4</nacos.version>
